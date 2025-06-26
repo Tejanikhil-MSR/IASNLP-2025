@@ -10,14 +10,14 @@ def train(model, dataloader, optimizer, criterion, device, num_epochs):
         correct = 0
         total = 0
 
-        for (batch_audio, batch_prosody, batch_labels) in dataloader:
-            audio_tensors = torch.cat([x[0] for x in batch_audio], dim=0).to(device)
-            valid_frames = torch.tensor([x[1] for x in batch_audio]).to(device)
+        for (batch_audio, valid_frames, batch_prosody, batch_labels) in dataloader:
+            audio_tensors = batch_audio.to(device)
+            valid_frames = torch.tensor(valid_frames).to(device)
             prosody_tensor = batch_prosody.to(device)
             labels = torch.tensor(batch_labels).to(device)
 
             optimizer.zero_grad()
-            outputs = model(audio_tensors, valid_frames, prosody_tensor)
+            outputs = model(audio_tensors=audio_tensors, valid_frames=valid_frames, prosody_tensor=prosody_tensor)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -28,6 +28,7 @@ def train(model, dataloader, optimizer, criterion, device, num_epochs):
             total += labels.numel()
 
         acc = 100 * correct / total
+        
         print(f"Epoch {epoch+1} | Loss: {epoch_loss:.4f} | Accuracy: {acc:.2f}%")
         
         

@@ -10,7 +10,7 @@ class StressClassifier(nn.Module):
 
     def forward(self, audio_tensors, valid_frames, prosody_tensor):
         # Step 1: Process raw audio through encoder
-        encoder_output = self.encoder(audio_tensors, valid_frames)
+        encoder_output = self.encoder(audio_signal=audio_tensors, length=valid_frames)
 
         # Step 2: Pass encoder output and prosody features through classifier head
         output = self.classifier_head(encoder_output, prosody_tensor)
