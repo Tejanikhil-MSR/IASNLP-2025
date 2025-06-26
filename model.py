@@ -2,90 +2,132 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class EncoderProjector(nn.Module):
-    def __init__(self, input_feature_dim, output_feature_dim=7, target_t=256):
+class StressClassifier(nn.Module):
+    def __init__(self, encoder, classifier_head):
         super().__init__()
-        self.output_temporal_dim = target_t
-        self.feature_reducer = nn.Sequential(
-            nn.Linear(input_feature_dim, input_feature_dim//2),
-            nn.ReLU(),
-            nn.Linear(input_feature_dim//2, input_feature_dim // 4),
-            nn.ReLU(),
-            nn.Linear(input_feature_dim // 4, output_feature_dim)
+        self.encoder = encoder
+        self.classifier_head = classifier_head
+
+    def forward(self, audio_tensors, valid_frames, prosody_tensor):
+        # Step 1: Process raw audio through encoder
+        encoder_output = self.encoder(audio_tensors, valid_frames)
+
+        # Step 2: Pass encoder output and prosody features through classifier head
+        output = self.classifier_head(encoder_output, prosody_tensor)
+        return output
+
+class ClassificationHead(nn.Module):
+    def __init__(self, encoder_output_shape, prosody_shape, max_output_seq_length, word_level_feature_dim):
+        """
+        encoder_output_shape: (T_enc, F_enc) - Temporal & Feature dimensions from encoder
+        prosody_shape: (T_pros, F_pros) - Temporal & Feature dimensions of prosody features
+        max_output_seq_length: Desired output sequence length (word-level)
+        word_level_feature_dim: Dimension for abstract word-level features
+        """
+        super().__init__()
+        T_enc, F_enc = encoder_output_shape
+        T_pros, F_pros = prosody_shape
+
+        # Project encoder output to match prosody feature dimensions
+        self.projector = EncoderProjector(T_enc, F_enc, T_pros, F_pros)
+
+        # Fuse projected encoder features with prosody features
+        self.feature_fusion = FeatureFusion(F_pros)
+
+        # Extract abstract word-level features
+        self.ABW_representation = AbstractWordLevelFeatureExtractor(
+            T_pros, F_pros, word_level_feature_dim, max_output_seq_length
         )
-        
+
+        # Classification layers
+        self.classifier = nn.Sequential(
+            nn.Linear(word_level_feature_dim, word_level_feature_dim//2),
+            nn.ReLU(),
+            nn.Linear(word_level_feature_dim//2, 1)  # Binary stress classification
+        )
+
+    def forward(self, encoder_output, prosody_tensor):
+        # Project encoder output to match prosody dimensions
+        projected = self.projector(encoder_output)
+
+        # Fuse features
+        fused = self.feature_fusion(projected, prosody_tensor)
+
+        # Extract word-level representations
+        word_features = self.ABW_representation(fused)
+
+        # Classify each word position
+        logits = self.classifier(word_features)
+        return logits.squeeze(-1)  # Output shape: (batch, max_output_seq_length)
+
+class EncoderProjector(nn.Module):
+    def __init__(self, T_enc, F_enc, T_enc_proj, F_enc_proj):
+        super().__init__()
+        self.T_enc_proj = T_enc_proj
+        # Lets first reduce the feature dimension
+        self.feature_reducer = nn.Sequential(
+            nn.Linear(F_enc, F_enc//2),
+            nn.ReLU(),
+            nn.Linear(F_enc//2, F_enc // 4),
+            nn.ReLU(),
+            nn.Linear(F_enc // 4, F_enc_proj)
+        )
+
     def forward(self, x):
-        # Reduce feature dimension to (batch, T, 7)
-        x = self.feature_reducer(x) 
-        
-        # Adjust temporal dimension
-        x = x.transpose(1, 2)  # (batch, 7, T)
-        
+        # Reduce feature dimension to (batch, T_enc, F_enc_proj)
+        x = self.feature_reducer(x)
+
+        # Adjust temporal dimension of input
+        x = x.transpose(1, 2)  # (batch, F_enc_proj, T_enc)
+
         # Interpolate to target length
-        if x.size(2) != self.output_temporal_dim:
-            # we can use the convolution also where downsampling happens with learnable parameters 
+        if x.size(2) != self.T_enc_proj:
+            # we can use the convolution also where downsampling happens with learnable parameters
             # but to reduce the training cost, we are using interpolation (Deterministic downsampling)
-            x = F.interpolate(x, size=self.output_temporal_dim, mode='linear', align_corners=False)
-        
+            x = F.interpolate(x, size=self.T_enc_proj, mode='linear', align_corners=False)
+
         return x.transpose(1, 2)  # (batch, target_t, 7)
 
 class FeatureFusion(nn.Module):
-    def __init__(self, time_frames=256, feature_dim=7):
+    def __init__(self, feature_dim):
         super().__init__()
-        self.time_frames = time_frames
-        self.feature_dim = feature_dim
-        
-        # Fusion layer: learnable weights for each feature
+        # Learnable weights for feature fusion
         self.fusion_weights = nn.Parameter(torch.ones(feature_dim))
-    
-    def forward(self, feature_matrix1, prosodic_fm):
-        # Ensure feature_matrix1 and prosodic_fm have compatible dimensions
-        if feature_matrix1.size(1) != prosodic_fm.size(1):
-            raise ValueError("Feature matrix and prosodic features must have the same temporal dimension.")
-        
-        # Fuse features: element-wise multiplication with learnable weights
-        fused_features = feature_matrix1 + self.fusion_weights * prosodic_fm
-        
-        return fused_features
+        # Optional: Add small noise for initialization
+        nn.init.normal_(self.fusion_weights, mean=1.0, std=0.1)
+
+    def forward(self, projected, prosody):
+        # Both inputs: (batch, T, F)
+        # Feature-wise weighted fusion
+        fused = projected + self.fusion_weights * prosody
+        return fused
 
 class AbstractWordLevelFeatureExtractor(nn.Module):
-    def __init__(self, input_temporal_dim = 256, input_feature_dim = 7, output_feature_dim = 7, output_temporal_dim=32):
+    def __init__(self, T_in, F_in, F_out, T_out):
         super().__init__()
-        # I cannot use the convolution here, so lets use linear layers for temporal downsampling
-        # Apply linear layers along temporal dimension
-        self.temporal_downsampler = nn.Sequential(
-            nn.Linear(input_temporal_dim, input_temporal_dim//2),
+        # Temporal compression
+        self.temporal_compressor = nn.Sequential(
+            nn.Linear(T_in, T_in//2),
             nn.ReLU(),
-            nn.Linear(input_temporal_dim//2, output_temporal_dim),
+            nn.Linear(T_in//2, T_out),
             nn.ReLU()
         )
-        kernel_size = input_feature_dim + 1 - output_feature_dim
-        self.conv = nn.Conv1d(in_channels=output_temporal_dim, 
-                              out_channels=output_temporal_dim, 
-                              kernel_size=kernel_size,
-                              stride=1,
-                             )
-        
-    def forward(self, x):
-        # Apply temporal downsampling
-        x = x.transpose(1, 2)  # (batch, input_feature_dim, input_temporal_dim)
-        x = self.temporal_downsampler(x)  # (batch, input_feature_dim, output_temporal_dim)
-        # Apply convolution for feature extraction
-        x = x.transpose(1, 2)  # (batch, output_temporal_dim, input_feature_dim)
-        x = self.conv(x)  # (batch, output_temporal_dim, output_feature_dim)
 
-        return x  # (batch, output_temporal_dim, output_feature_dim)
-
-# Full stress prediction model
-class StressClassifier(nn.Module):
-    def __init__(self, input_temporal_dim = 32, input_feature_dim=7, hidden_dim=128):
-        super().__init__()
-        self.classification_layer = nn.Linear(input_feature_dim, input_temporal_dim)
-        self.relu = nn.ReLU()
-        self.output_layer = nn.Linear(input_temporal_dim, 1)  
+        # Feature expansion
+        self.feature_expander = nn.Sequential(
+            nn.Linear(F_in, F_in*2),
+            nn.ReLU(),
+            nn.Linear(F_in*2, F_in*4),
+            nn.ReLU(),
+            nn.Linear(F_in*4, F_out)
+        )
 
     def forward(self, x):
-        x = self.classification_layer(x)  # (batch, output_temporal_dim, 1)
-        x = self.relu(x)  # Apply ReLU activation
-        x = self.output_layer(x)  # (batch, output_temporal_dim, 1)
-        return x
+        # x shape: (batch, T_in, F_in)
+        # Compress temporal dimension
+        x = x.permute(0, 2, 1)  # (batch, F_in, T_in)
+        x = self.temporal_compressor(x)  # (batch, F_in, T_out)
+
+        # Expand features
+        x = x.permute(0, 2, 1)  # (batch, T_out, F_in)
+        return self.feature_expander(x)  # (batch, T_out, F_out)
