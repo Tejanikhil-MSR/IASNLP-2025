@@ -13,7 +13,7 @@ The dataset consists of a CSV file with the following columns:
 - 🔤 **Stress Labels** – Word-level stress annotations (e.g., stressed/unstressed)
 
 You can access the dataset here:  
-👉 [**Stress-Annotated Dataset for English**](https://docs.google.com/spreadsheets/d/1I4Bj6IsOunkRF0Eb7c9H3Y94gCnQNJxU/edit?usp=sharing&ouid=114605632554366045055&rtpof=true&sd=true).
+👉 [**Stress-Annotated Dataset for English**](https://docs.google.com/spreadsheets/d/1I4Bj6IsOunkRF0Eb7c9H3Y94gCnQNJxU/edit?usp=sharing&ouid=114605632554366045055&rtpof=true&sd=true).\
 👉 [**Raw audio files for training**](https://drive.google.com/file/d/1BhZ5VNkTb7v1AK7ALYvpSfivbij4v4i-/view?usp=sharing)
 
 ---
