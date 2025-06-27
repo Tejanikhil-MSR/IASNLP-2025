@@ -34,15 +34,15 @@ You can access the dataset here:
 
 ## 🚀 Getting Started
 
-1. Clone the repository:
-   `git clone <repo_url>`
-   `cd <repo_directory>`
+1. Clone the repository:\
+- `git clone <repo_url>`
+- `cd <repo_directory>`
 
 2. Set up the environment:
-   `chmod +x setup_nv.sh`
-   `./setup_env.sh`
+- `chmod +x setup_nv.sh`
+- `./setup_env.sh`
 
 3. Run the notebook:
-   Open `stress_classification_model.ipynb` to train the model.
+- Open and Run `stress_classification_model.ipynb` to train the model.
 
 ---
