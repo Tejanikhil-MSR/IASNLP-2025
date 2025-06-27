@@ -11,6 +11,7 @@ def load_waveform(audio, preprocessor, max_audio_sequence_length, device):
     if sr != 16000:
         resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=16000)
         waveform = resampler(waveform)
+        
     waveform = waveform.mean(dim=0).unsqueeze(0)  # shape: (1, time)
     waveform = waveform.to(device)
     features, features_length = preprocessor(input_signal=waveform, length=torch.tensor([waveform.shape[1]]).to(device))
@@ -24,8 +25,7 @@ def load_waveform(audio, preprocessor, max_audio_sequence_length, device):
     else:
         features = features[:max_audio_sequence_length]
 
-    
-    return features, features_length
+    return features.transpose(0,1), features_length
 
 smile = opensmile.Smile(
     feature_set=opensmile.FeatureSet.GeMAPSv01b,
@@ -54,7 +54,6 @@ def custom_audio_collate_fn(batch):
     valid_time_frames_list = [item[1] for item in batch]
     prosodic_features_list = [item[2] for item in batch]
     labels_list = [item[3] for item in batch]
-    print([i.shape for i in prosodic_features_list])
     collated_input_features = torch.stack(input_features_list, dim=0)
     collated_time_frames = torch.stack(valid_time_frames_list, dim=0)
     collated_prosodic_features = torch.stack(prosodic_features_list, dim=0)

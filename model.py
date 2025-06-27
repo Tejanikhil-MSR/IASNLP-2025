@@ -10,8 +10,8 @@ class StressClassifier(nn.Module):
 
     def forward(self, audio_tensors, valid_frames, prosody_tensor):
         # Step 1: Process raw audio through encoder
-        encoder_output = self.encoder(audio_signal=audio_tensors, length=valid_frames)
-
+        encoder_output,encoder_output_shape = self.encoder(audio_signal=audio_tensors, length=valid_frames)
+        encoder_output = encoder_output.transpose(1,2)
         # Step 2: Pass encoder output and prosody features through classifier head
         output = self.classifier_head(encoder_output, prosody_tensor)
         return output
@@ -48,6 +48,7 @@ class ClassificationHead(nn.Module):
 
     def forward(self, encoder_output, prosody_tensor):
         # Project encoder output to match prosody dimensions
+        # print("Input of Classification Module : ", encoder_output.shape)
         projected = self.projector(encoder_output)
 
         # Fuse features
@@ -64,6 +65,8 @@ class EncoderProjector(nn.Module):
     def __init__(self, T_enc, F_enc, T_enc_proj, F_enc_proj):
         super().__init__()
         self.T_enc_proj = T_enc_proj
+        self.F_enc = F_enc
+        self.T_enc = T_enc
         # Lets first reduce the feature dimension
         self.feature_reducer = nn.Sequential(
             nn.Linear(F_enc, F_enc//2),
@@ -75,8 +78,8 @@ class EncoderProjector(nn.Module):
 
     def forward(self, x):
         # Reduce feature dimension to (batch, T_enc, F_enc_proj)
+        # print(x.shape, self.F_enc, self.T_enc)
         x = self.feature_reducer(x)
-
         # Adjust temporal dimension of input
         x = x.transpose(1, 2)  # (batch, F_enc_proj, T_enc)
 

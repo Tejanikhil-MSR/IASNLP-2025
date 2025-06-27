@@ -54,7 +54,7 @@ class AudioDataset(torch.utils.data.Dataset):
     else:
         padded_feature_tensor = feature_tensor[:256]  # truncate if too long
 
-    print(feature_tensor.shape, padded_feature_tensor.shape)
+    # print(feature_tensor.shape, padded_feature_tensor.shape)
     
     # Add batch dimension: [T, F]
     return padded_feature_tensor
@@ -78,7 +78,7 @@ class AudioDataset(torch.utils.data.Dataset):
     else:
         features = features[:self.max_audio_sequence_length]
 
-    return features, features_length
+    return features.transpose(0,1), features_length
 
   def pad_tensor(self, tensor, pad_length):
     if(type(tensor)!=torch.Tensor):
