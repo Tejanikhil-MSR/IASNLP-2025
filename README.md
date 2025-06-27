@@ -4,6 +4,11 @@ This project proposes an approach for **word-level stress identification** from 
 
 ---
 
+## Word Level stress Identification pipeline
+
+![Screenshot from 2025-06-27 13-26-12](https://github.com/user-attachments/assets/2cac9478-a17f-471e-87c0-d62859d1e863)
+
+
 ## 📁 Dataset
 
 The dataset consists of a CSV file with the following columns:
