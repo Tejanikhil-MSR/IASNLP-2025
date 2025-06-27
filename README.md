@@ -38,6 +38,7 @@ You can access the dataset here:
   - `cd <repo_directory>`
 
 - Set up the environment:
+  - create a new `conda` env with `python-3.10` version
   - `chmod +x setup_nv.sh`
   - `./setup_env.sh`
 
